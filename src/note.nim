@@ -11,9 +11,8 @@ const
   green_color = "\e[1;32m"
   yellow_color = "\e[1;33m"
   blue_color = "\e[1;34m"
-  magenta_color = "\e[1;35m"
   cyan_color = "\e[1;36m"
-  white_color = "\e[1;37m"
+  white_color = "\e[1;97m"
 
 type
   NoteLevel = enum
@@ -53,51 +52,51 @@ proc chunk(source: string, size: int): seq[string] =
     bucket = newSeq[Rune](0)
   assert result.len == expected
 
-proc to_string(level: NoteLevel): string =
+proc to_strings(level: NoteLevel): (string, string) =
   case level:
   of level_info:
-    result = "info"
+    result = (" INFO", "$# INFO$#" % [green_color, reset_color])
   of level_warn:
-    result = "warn"
+    result = (" WARN", "$# WARN$#" % [yellow_color, reset_color])
   of level_error:
-    result = "error"
+    result = ("ERROR", "$#ERROR$#" % [red_color, reset_color])
   of level_debug:
-    result = "debug"
+    result = ("DEBUG", "$#DEBUG$#" % [blue_color, reset_color])
 
 proc formatted_print(frame: NoteFrame) =
   let width = terminalWidth()
   let note_width = runeLen(frame.note)
   # base line
   # time sens: " 8/4/11  INFO message loel "
+  let (level_str, level_str_colored) = frame.level.to_strings()
   let 
-    hour_str = strutils.align(frame.created_when.format("H"), 2)
+    level_str_len = runeLen(level_str)
+    hour_str = unicode.align(frame.created_when.format("H"), 2)
     middle_time_str = frame.created_when.format(":mm MMM d")
-    time_str = hour_str & middle_time_str
-    expected_time_str_len = runeLen(time_str) + 1
-    padded_time_str = strutils.align(time_str, expected_time_str_len)
+    time_str = hour_str & middle_time_str & " "
+    expected_time_str_len = runeLen(time_str)
+    padded_time_str = unicode.align(time_str, expected_time_str_len)
     padded_time_str_len = runeLen(padded_time_str)
-    padded_level_str = strutils.align(frame.level.to_string(), 6)
-    padded_level_str_len = runeLen(padded_level_str)
-    space_left_for_message = width - (padded_level_str_len + padded_time_str_len + 1)
+    space_left_for_message = width - (level_str_len + padded_time_str_len + 1)
   var lines = newSeq[string](1)
   if frame.time_sensitive:
-    lines[0] = padded_time_str & padded_level_str & " "
+    lines[0] = padded_time_str & level_str_colored & " "
   else:
-    let anticipated_str = padded_level_str & " "
+    let anticipated_str = level_str_colored & " "
     let anticipated_size = runeLen(anticipated_str)
-    lines[0] = strutils.align(anticipated_str, expected_time_str_len + anticipated_size)
+    lines[0] = unicode.align(anticipated_str, expected_time_str_len + anticipated_size)
 
   if runeLen(frame.note) > space_left_for_message:
     # the note is too big to fit on the given space, splice in
     let space_aware_space_left = space_left_for_message - 1
-    lines[0] = lines[0] & frame.note[0..space_aware_space_left]
+    lines[0] = lines[0] & white_color & frame.note[0..space_aware_space_left] & reset_color
     # append the rest
     let rest = frame.note[space_aware_space_left..^1]
     let appending_format_line = repeat(' ', expected_time_str_len - 2) & "..."
-    for piece in chunk(rest, space_aware_space_left + padded_level_str_len + 1):
-      lines.add(appending_format_line & piece)
+    for piece in chunk(rest, space_aware_space_left + level_str_len + 1):
+      lines.add(white_color & appending_format_line & piece & reset_color)
   else:
-    lines[0] = lines[0] & frame.note
+    lines[0] = lines[0] & white_color & frame.note & reset_color
   for line in lines:
     stdout.write line
   stdout.write "\n"
