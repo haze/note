@@ -2,12 +2,19 @@ import note
 import tables, terminal
 
 
-debug("time_sensitive=false", context={"1": "34029384023049203984023949238049820320498023940923094one", "2": "two", "3": "three"}.toTable)
-info("time_sensitive=false", context={"1": "bruh moment", "2": "two", "3": "three"}.toTable)
-warn("time_sensitive=false", context={"1": "bruh", "2": "two", "3": "three"}.toTable)
-error("time_sensitive=false", context={"1": "456", "2": "two", "3": "three"}.toTable)
+var pad: Pad = @[]
 
-debug("reeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeally long line", context={"1": "one", "2": "two", "3": "three"}.toTable)
-# debug("reeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeally long line")
-# error("reeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeally long line")
-# warn("reeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeally long line")
+
+
+pad.info("Trying to update...", {"progress": $0})
+pad.info("Trying to update...", {"progress": $10})
+pad.info("Trying to update...", {"progress": $20})
+pad.info("Trying to update...", {"progress": $30})
+pad.info("Trying to update...", {"progress": $40})
+pad.info("Trying to update...", {"progress": $50})
+pad.info("Trying to update...", {"progress": $60})
+pad.info("Trying to update...", {"progress": $70})
+pad.info("Trying to update...", {"progress": $80, "threat_detected": "STACK_LIMIT_NEAR_MAX"})
+pad.warn("Stack Limit Reached! Trying to extend...", {"threat": "STACK_LIMIT_NEAR_MAX"})
+pad.debug("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||", {"bruh": "moment"})
+pad.error("This is a ridiculously long error message and should be clipping in the terminal, make sure to contact the systems administrator to make sure the rest of the mainframe doesn't catch fire!")

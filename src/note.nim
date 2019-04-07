@@ -1,5 +1,7 @@
+import algorithm
 import math, macros 
 {.experimental: "forLoopMacros".}
+import options
 import queues
 import strutils, sequtils
 import tables, terminal, times
@@ -24,10 +26,6 @@ const
 type
   NoteLevel = enum
     level_info, level_warn, level_error, level_debug
-    # info + warn = potentially user facing
-    # error = user facing + abort
-    # debug = developer facing, 
-    # automatically purged in production TODO(hazebooth)
 
 type
   NoteFrame = object
@@ -36,6 +34,13 @@ type
     context: Table[string, string]
     time_sensitive: bool
     created_when: DateTime
+
+type
+  Pad* = seq[NoteFrame]
+
+proc last_used_level(pad: Pad): Option[NoteLevel] =
+  if pad.len > 0:
+    result = some(pad[^1].level)
 
 macro enumerate(x: ForLoopStmt): untyped =
   expectKind x, nnkForStmt
@@ -80,18 +85,6 @@ proc chunk(source: string, size: int): seq[string] =
 proc colorize(thing: string, color: string): string = 
   result = color & thing & reset_color
 
-proc to_strings(level: NoteLevel): (string, string) =
-  ## returns (uncolored, colored) strings representing the level
-  case level:
-  of level_info:
-    result = ("[I]", "[" & colorize("I", green_color) & "]")
-  of level_warn:
-    result = ("[W]", "[" & colorize("W", yellow_color) & "]")
-  of level_error:
-    result = ("[E]", "[" & colorize("E", red_color) & "]")
-  of level_debug:
-    result = ("[#]", "[" & colorize("#", blue_color) & "]")
-  
 proc message_color(level: NoteLevel): string =
   case level:
   of level_info:
@@ -102,117 +95,123 @@ proc message_color(level: NoteLevel): string =
     result = b_red_color
   of level_debug:
     result = b_blue_color
-    
-
-# proc context_width(context: Table[string, string]): int =
-#   let pair_len = toSeq(context.pairs()).len
-#   if pair_len == 1:
-#     result = 7
-#   else:
-#     result = ((pair_len - 1) * 8) + 7
-# lol i rly thought that would work smh... ^
-proc context_width(context: Table[string, string]): int =
-  let pairs = toSeq(context.pairs())
-  for index, pair in enumerate(pairs):
-    let (key, value) = pair
-    let is_last = index == pairs.len - 1
-    var format = "$# = $#"
-    if not is_last:
-      format &= ", "
-    result += runeLen(format % [key, value])
 
 
-proc make_short_context(context: Table[string, string]): string =
-  let pairs = toSeq(context.pairs())
-  for index, pair in enumerate(pairs):
-    let (key, value) = pair
-    let is_last = index == pairs.len - 1
-    let colored_obj = colorize("$#", b_cyan_color)
-    var format = colored_obj & colorize(" = ", white_color) & colored_obj
-    if not is_last:
-      format &= ", "
-    result &= format % [key, value]
+proc to_strings(level: NoteLevel): (string, string) =
+  ## returns (uncolored, colored) strings representing the level
+  var identifier: string = "?"
+  case level:
+  of level_info:
+    identifier = "I"
+  of level_warn:
+    identifier = "W"
+  of level_error:
+    identifier = "E"
+  of level_debug:
+    identifier = "#"
+  result = ("[" & identifier & "]", "[" & colorize(identifier, level.message_color) & "]")
 
-proc write_context(context: Table[string, string], offset, width: int) =
-  let spacer = repeat(' ', offset)
-  let pairs = toSeq(context.pairs())
-  var mut_offset = offset
-  var new_line, first_run = true
-  for index, pair in enumerate(pairs):
-    let (key, value) = pair
-    let is_last = index == pairs.len - 1
-    let colored_obj = colorize("$#", b_cyan_color)
-    var format = colored_obj & colorize(" = ", white_color) & colored_obj
-    var uncolored_format = "$# = $#"
-    if not is_last:
-      format &= ", "
-      uncolored_format &= ", "
-    let written = format % [key, value]
-    let written_len = runeLen(uncolored_format % [key, value])
-    if mut_offset + written_len > width:
-      new_line = true
-      mut_offset = offset
-    if new_line:
-      if not first_run:
-        stdout.write "\n"
-      else:
-        first_run = false
-      stdout.write spacer
-      new_line = false
-    stdout.write written
-    mut_offset += written_len
-  stdout.write "\n"
-
-proc formatted_print(frame: NoteFrame) =
-  let width = terminalWidth()
-  let note_width = runeLen(frame.note)
-  # base line
-  # time sens: " 8/4/11  INFO message loel "
-  let (level_str, level_str_colored) = frame.level.to_strings()
-  let message_color_str = frame.level.message_color()
-  let 
-    level_str_len = runeLen(level_str)
-    hour_str = unicode.align(frame.created_when.format("H"), 2)
-    middle_time_str = frame.created_when.format(":mm MMM d")
-    time_str = hour_str & middle_time_str & " "
-    expected_time_str_len = runeLen(time_str)
-    padded_time_str_uncolored = unicode.align(time_str, expected_time_str_len)
-    padded_time_str = white_color & unicode.align(time_str, expected_time_str_len) & reset_color
-    padded_time_str_len = runeLen(padded_time_str_uncolored)
-    space_left_for_message = width - (level_str_len + padded_time_str_len)
-    main_offset = padded_time_str_len
-  var 
-    lines = newSeq[string](1)
-    has_written_context = false
+proc print_time(buffer: var string, frame: NoteFrame): int =
+  result = 0
   if frame.time_sensitive:
-    lines[0] = padded_time_str & level_str_colored & " "
-  else:
-    let anticipated_str = level_str_colored & " "
-    let anticipated_size = runeLen(anticipated_str)
-    lines[0] = unicode.align(anticipated_str, expected_time_str_len + anticipated_size)
+    let text = frame.created_when.format(" H:mm MMM dd ")
+    let text_len = runeLen(text)
+    buffer &= colorize(text, white_color)
+    result += text_len
 
-  if runeLen(frame.note) > space_left_for_message:
-    # the note is too big to fit on the given space, splice in
-    let space_aware_space_left = space_left_for_message - 2
-    lines[0] &= message_color_str & frame.note[0..space_aware_space_left] & reset_color
-    # append the rest
-    let rest = frame.note[space_aware_space_left..^1]
-    let appending_format_line = repeat(' ', main_offset - 3) & "..."
-    for piece in chunk(rest, space_aware_space_left + level_str_len + 2):
-      lines.add(appending_format_line & message_color_str & piece & reset_color)
-  else:
+proc print_level(buffer: var string, pad: Pad, frame: NoteFrame, offset: int): int =
+  result = offset  
+  var should_print = true
+  var level_str_colorized = ""
+  try:
+    should_print = pad.last_used_level.get() != frame.level
+  except UnpackError:
+    discard
 
-    if runeLen(lines[0]) + note_width + context_width(frame.context) + 1 < width:
-      lines[0] &= message_color_str & frame.note & reset_color & " " & make_short_context(frame.context)
-      has_written_context = true
+  if should_print:
+    let (level_str, new_level_str_colorized) = frame.level.to_strings
+    let level_str_len = runeLen(level_str)
+    result += level_str_len
+    level_str_colorized = new_level_str_colorized
+  else:
+    # print continuation
+    result += 3 # runeLen("[|]")
+    level_str_colorized = "[" & colorize("|", frame.level.message_color) & "]"
+  buffer &= level_str_colorized
+
+proc print_multiline(buffer: var string, note: string, offset, width: int): int =
+  result = runeLen(note)
+  let
+    space_left = width - offset - 1
+    text_for_first_line = note[..(space_left-2)]
+    rest_to_print = chunk(note[space_left-1..^1], space_left)
+    spacer = repeat(" ", offset - 3) & "..."
+  buffer &= " " & text_for_first_line & "\n"
+  
+  for index, line in enumerate(rest_to_print):
+    buffer &= spacer
+    if line[0] == ' ':
+      buffer &= line[1..^1] & " "
     else:
-      lines[0] &= message_color_str & frame.note & reset_color
-  for line in lines:
-    stdout.write line
-  stdout.write "\n"
-  if not has_written_context:
-    write_context frame.context, main_offset, width
-  flushFile stdout
+      buffer &= line
+    if index != rest_to_print.len - 1:
+      buffer &= "\n"
+
+proc context_width(context: Table[string, string]): int =
+  result = 0
+  var pairs = toSeq(context.pairs).reversed
+  let pair_len = pairs.len
+  for index, pair in enumerate(pairs):
+    let (key, value) = pair
+    var format = "$# = $#"
+    if index != pair_len - 1:
+      format &= ", "
+    let printed = format % [key, value]
+    result += runeLen(printed)
+
+proc print_single_line_context(buffer: var string, context: Table[string, string], level: NoteLevel) =
+  let pairs = toSeq(context.pairs).reversed
+  let pair_len = pairs.len
+  buffer &= " "
+  for index, pair in enumerate(pairs):
+    let (key, value) = pair
+    var format = "$# = $#"
+    if index != pair_len - 1:
+      format &= ", "
+    let printed = format % [colorize($key, level.message_color), colorize($value, white_color)]
+    buffer &= printed
+
+proc print_note(buffer: var string, frame: NoteFrame, offset, width: int): int =
+  result = offset
+  let
+    note = frame.note
+    note_len = runeLen(note)
+
+  if note_len + offset > width:
+    result = print_multiline(buffer, note, offset, width) # can reset offset
+  else:
+    buffer &= " " & note
+    let context_width = context_width frame.context
+    if context_width + offset + 1 <= width:
+      result += context_width
+      print_single_line_context(buffer, frame.context, frame.level)
+
+proc formatted_print(pad: Pad, frame: NoteFrame) =
+  # 1 - print time or not
+  # 2 - print message level if new
+  # 3 - print message
+  var buffer = ""
+  var offset = print_time(buffer, frame)
+  let width = terminalWidth()
+  offset = print_level(buffer, pad, frame, offset)
+  offset = print_note(buffer, frame, offset, width)
+
+  buffer &= "\n"
+  stdout.write buffer
+  #let context_offset, printed_context = print_context frame.context, offset
+  #offset = context_offset
+  #if not printed_context:
+  #  echo "tbi"
 
 
 proc easy_frame(message: string, 
@@ -226,20 +225,29 @@ proc easy_frame(message: string,
     created_when: now()
   )
 
-proc info*(message: string, 
-  time_sensitive: bool = true, context: Table[string, string]) =
-  formatted_print(easy_frame(message, time_sensitive, NoteLevel.level_info, context))
 
-proc warn*(message: string, 
-  time_sensitive: bool = true, context: Table[string, string]) =
-  formatted_print(easy_frame(message, time_sensitive, NoteLevel.level_warn, context))
+proc info*(pad: var Pad, message: string, context: openArray[(string, string)] = [],
+  time_sensitive: bool = true) =
+  let frame = easy_frame(message, time_sensitive, NoteLevel.level_info, context.toTable)
+  pad.formatted_print frame
+  pad.add frame
 
-proc error*(message: string, 
-  time_sensitive: bool = true, context: Table[string, string]) =
-  formatted_print(easy_frame(message, time_sensitive, NoteLevel.level_error, context))
+proc warn*(pad: var Pad, message: string, context: openArray[(string, string)] = [],
+  time_sensitive: bool = true) =
+  let frame = easy_frame(message, time_sensitive, NoteLevel.level_warn, context.toTable)
+  pad.formatted_print frame
+  pad.add frame
 
-proc debug*(message: string, 
-  time_sensitive: bool = true, context: Table[string, string]) =
-  formatted_print(easy_frame(message, time_sensitive, NoteLevel.level_debug, context))
+proc error*(pad: var Pad, message: string, context: openArray[(string, string)] = [],
+  time_sensitive: bool = true) =
+  let frame = easy_frame(message, time_sensitive, NoteLevel.level_error, context.toTable)
+  pad.formatted_print frame
+  pad.add frame
+
+proc debug*(pad: var Pad, message: string, context: openArray[(string, string)] = [],
+  time_sensitive: bool = true) =
+  let frame = easy_frame(message, time_sensitive, NoteLevel.level_debug, context.toTable)
+  pad.formatted_print frame
+  pad.add frame
 
 
