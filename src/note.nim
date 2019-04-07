@@ -104,12 +104,23 @@ proc message_color(level: NoteLevel): string =
     result = b_blue_color
     
 
+# proc context_width(context: Table[string, string]): int =
+#   let pair_len = toSeq(context.pairs()).len
+#   if pair_len == 1:
+#     result = 7
+#   else:
+#     result = ((pair_len - 1) * 8) + 7
+# lol i rly thought that would work smh... ^
 proc context_width(context: Table[string, string]): int =
-  let pair_len = toSeq(context.pairs()).len
-  if pair_len == 1:
-    result = 7
-  else:
-    result = ((pair_len - 1) * 8) + 7
+  let pairs = toSeq(context.pairs())
+  for index, pair in enumerate(pairs):
+    let (key, value) = pair
+    let is_last = index == pairs.len - 1
+    var format = "$# = $#"
+    if not is_last:
+      format &= ", "
+    result += runeLen(format % [key, value])
+
 
 proc make_short_context(context: Table[string, string]): string =
   let pairs = toSeq(context.pairs())
